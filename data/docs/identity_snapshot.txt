@@ -1,0 +1,11 @@
+My name is Arhaam Atiq. I go to San Jose State University and I am a Junior. I am an Applied Math + CS Major, previously a Physics Major.
+I love building tech that is useful to myself, or a set of people. I really enjoy the process of building and creating something, and to me there is no better feeling than engineering something and watching it come to life.
+I am currently on a mission to make my mark in the tech industry, contribute to valuable outcomes, and enjoy every second of it.
+
+I am currently building Applied Engineering, a student run software agency at SJSU. I came up with the idea for this club after realising a two way demand in Universities and Industry for application of student talent. 
+There is A large gap between tech/CS students in University and Industry. Students are unable to equip themselves with Industry relevant skills until their first internship, which also require industry-relevant skills.
+Companies also get to explore fresh ideas from young talent, feeding their innovation engine, simply solve problems or build prototypes that they do not have the time/resources to spend on.
+
+My goals for the future are to build and scale something meaningful and impactful, and live the full experience of creating something the world wants.
+
+I'm obsessed with the idea of bringing intelligence to every person on this planet, but not in as a chat function. I wish to explore how we can use LLMs and it's reasoning capabilities in different intuitive interfaces and not just text.

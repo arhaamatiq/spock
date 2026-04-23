@@ -29,7 +29,7 @@ pip install -r requirements.txt
 Copy the example environment file and add your OpenAI API key:
 
 ```bash
-cp env.example .env
+cp .env.example .env
 ```
 
 Edit `.env` and set your API key:
@@ -61,6 +61,14 @@ Optional flags:
 - `--chunk-size 1000`: Override default chunk size
 - `--chunk-overlap 200`: Override default chunk overlap
 - `--debug`: Enable debug logging
+
+If you plan to deploy with a committed local Chroma store, use a full rebuild so the
+persisted directory matches the current contents of `data/docs/` exactly:
+
+```bash
+rm -rf chroma_store
+python -m spock_rag.ingest --docs ./data/docs --force
+```
 
 ### 5. Start Chatting
 
@@ -232,6 +240,23 @@ Check that your documents directory contains supported files (.pdf, .txt, .md).
 
 ### "Vector store is empty"
 Run the ingestion command before chatting: `python -m spock_rag.ingest --docs ./data/docs`
+
+## Railway Deployment
+
+This repo is set up for a simple Railway deploy that serves the API from a committed
+`chroma_store/` directory.
+
+1. Rebuild the store locally after doc changes:
+   `python -m spock_rag.ingest --docs ./data/docs --force`
+2. Commit both `data/docs/` changes and the regenerated `chroma_store/`.
+3. Deploy the repo to Railway. The included `Procfile` runs `python -m spock_api`.
+4. In Railway variables, set at least:
+   - `OPENAI_API_KEY`
+   - `API_KEY`
+   - `DEBUG=false`
+   - `CORS_ORIGINS=https://your-frontend-domain`
+
+Railway injects `PORT` automatically, and the API now respects it out of the box.
 
 ### Tests are skipped
 Tests require `OPENAI_API_KEY` in your environment. Export it or add to `.env`.

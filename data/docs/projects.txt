@@ -1,0 +1,144 @@
+PROJECTS OVERVIEW
+=================
+Arhaam has built four major projects: AgentGate, HireSignal, a Customer Service RAG Chatbot, and DiscoverAI. All four are in his active portfolio. Three of the four are production-ready with real deployment artifacts, real evaluation metrics, or live users. His primary project is AgentGate, which is the most technically differentiated and the one he is continuing to develop as a startup.
+ 
+ 
+================================================================================
+PROJECT 1: AgentGate
+================================================================================
+ 
+WHAT IT IS
+AgentGate is a Python library that acts as a security and compliance layer for AI agents. When an AI agent tries to take an action in the real world, like calling an API, reading a file, sending an email, or running a command, AgentGate intercepts that action before it executes and decides whether it is allowed. If the action falls outside what the agent was supposed to be doing, AgentGate blocks it and logs the decision. Think of it as a firewall, but instead of filtering network traffic, it filters AI agent behavior.
+ 
+WHY IT EXISTS
+AI agents are increasingly being used in real business workflows. The problem is that agents make mistakes, get manipulated through prompt injection, or drift outside their intended task in ways that cause real damage. There was no lightweight, drop-in tool that developers could add to an existing agent to catch those violations in real time without rebuilding the whole system. AgentGate solves that gap.
+ 
+HOW IT WORKS
+AgentGate uses a two-tier architecture. The first tier is a fast deterministic check that runs in under 0.3 milliseconds. It compares the agent's attempted action against a declared scope using keyword and pattern matching. If the action clearly violates scope, it is blocked immediately without touching an LLM. If the action is ambiguous, it escalates to the second tier, which uses an LLM judge to make a nuanced decision. This design keeps latency extremely low for the common case while still handling complex edge cases accurately.
+ 
+Developers integrate AgentGate with a single decorator on their agent function. They declare what the agent is allowed to do, and AgentGate enforces it. The integration takes under five minutes with an existing Python agent.
+ 
+REAL PERFORMANCE METRICS
+These are real numbers from evaluation Run 007, tested across 370 adversarial scenarios:
+- Recall: 99.5% (almost never misses a real violation)
+- Precision: 97.7% (almost never blocks something it should allow)
+- Tier 1 latency: 0.3 milliseconds
+ 
+CURRENT DIRECTION: COMPLIANCE EVIDENCE PLATFORM
+AgentGate is being repositioned beyond pure enforcement. The bigger insight is that companies running agents in regulated environments, like fintech, healthcare tech, and any company pursuing SOC 2 certification, do not just need enforcement. They need evidence. Regulators and auditors want a paper trail showing that every agent action was reviewed, logged, and either approved or rejected with a reason. AgentGate generates that audit trail automatically. Every action, every decision, and every block is logged in a structured format that maps directly to what a compliance team needs to present to an auditor. The closest comparable company trajectory is Vanta, which turned a manual compliance process into an automated evidence platform and scaled to significant revenue. AgentGate is doing that for AI agent operations.
+ 
+TARGET CUSTOMERS
+Series A and B companies in fintech and healthcare tech that are already running agents in production. Companies pursuing SOC 2 Type II audits who need to demonstrate AI governance. Any team where a compliance, legal, or security person has asked "how do we know what our agents are doing?"
+ 
+TECH STACK
+Python, PyPI (published as agentgate-py), OpenAI API, Anthropic API, any OpenAI-compatible LLM endpoint, Supabase for audit logging, Rich for terminal output.
+ 
+DEPLOYMENT
+Live on PyPI. Anyone can install it with: pip install agentgate-py
+ 
+WHAT MAKES IT IMPRESSIVE TO A TECHNICAL INTERVIEWER
+It is not a demo or a tutorial project. It is a published open-source library with real evaluation infrastructure. The eval suite covers 370 adversarial scenarios. The architecture makes a deliberate engineering tradeoff between speed and accuracy by splitting decisions across two tiers. The metrics are real and were computed from actual test runs, not estimated. It shows that Arhaam thinks about AI systems at a production engineering level, not just a proof-of-concept level.
+ 
+ 
+================================================================================
+PROJECT 2: HireSignal
+================================================================================
+ 
+WHAT IT IS
+HireSignal is an AI pipeline that reads the hiring market at AI companies and generates intelligence reports. You give it a list of companies, and it researches each one simultaneously, pulling job postings, funding news, and academic papers, then produces a ranked report showing which companies are scaling fastest, what they are building, and what skills they are hiring for.
+ 
+WHY IT EXISTS
+Hiring signals predict where a company is going before they announce it publicly. A sudden wave of inference optimization roles means they are scaling a model to production. A cluster of alignment researcher postings means they are taking safety seriously ahead of a major release. This signal is publicly available but nobody reads it systematically because it is scattered across job boards, press releases, and research papers. HireSignal automates that synthesis.
+ 
+HOW IT WORKS
+The pipeline is built using LangGraph, which lets you define a workflow as a graph of connected steps. HireSignal's graph has seven nodes. It starts by validating the input, then fans out to research every company in parallel at the same time rather than one by one. Each parallel worker fetches job postings, news, and papers for a single company. Once all the parallel workers finish, the pipeline runs a skill extraction step, a trend analysis step, an LLM narration step per company, and then a final LLM synthesis that writes the ranked report across all companies.
+ 
+The parallel fan-out is one of the technically interesting parts. LangGraph's Send() routing lets you dynamically create worker nodes at runtime based on how many companies are in the request. If you ask for ten companies, ten workers run simultaneously.
+ 
+WHAT IT PRODUCES
+For each company: an explainable 0-100 AI intent score with a full breakdown of what signals drove it, a written intelligence narrative, week-over-week hiring velocity compared to the previous snapshot. Across all companies: a ranked report with cross-company patterns and a synthesis of what the data means for the market right now.
+ 
+OBSERVABILITY
+Every node in the pipeline sends traces to LangSmith. You can see exactly which LLM calls were made, how long each step took, and what data flowed through each node. This is important because production AI pipelines fail in subtle ways, and you need observability to debug them.
+ 
+TECH STACK
+LangGraph, LangChain, FastAPI, Streamlit, Tavily (web search API), Groq and OpenAI for LLM calls, LangSmith for tracing, Python with uv for dependency management.
+ 
+WHAT MAKES IT IMPRESSIVE TO A TECHNICAL INTERVIEWER
+Most student LangGraph projects are linear chains or simple chatbots. HireSignal uses parallel dynamic fan-out, which is a more advanced LangGraph pattern. It also has a real FastAPI backend, a Streamlit frontend, production-style observability with LangSmith, and a structured scoring system with explainable outputs rather than just an LLM writing a paragraph. It demonstrates that Arhaam can build multi-agent systems with real architecture decisions, not just chain a few LLM calls together.
+ 
+ 
+================================================================================
+PROJECT 3: Customer Service RAG Chatbot
+================================================================================
+ 
+WHAT IT IS
+A production-grade question-answering system that retrieves relevant information from a document knowledge base and generates accurate answers using an LLM. It is built to handle real customer service queries against a company's documentation or product knowledge.
+ 
+WHY IT IS MORE THAN A BASIC RAG PROJECT
+Most RAG projects are built once and never evaluated. This one has a full automated evaluation harness using RAGAS, which is the standard framework for measuring RAG pipeline quality. The evaluation runs automatically and produces four metrics: faithfulness, answer relevancy, context precision, and context recall. Arhaam ran a baseline evaluation, got real scores, then changed chunking parameters and re-ran to measure the improvement. That kind of iterative, metric-driven improvement is what separates a serious ML engineering project from a weekend tutorial.
+ 
+REAL EVALUATION SCORES (BASELINE)
+These are actual numbers from the RAGAS evaluation run:
+- Faithfulness: 0.83 (answers are grounded in the retrieved context, not hallucinated)
+- Answer Relevancy: 0.81 (answers actually address what was asked)
+- Context Precision: 0.82 (retrieved chunks are relevant to the question)
+- Context Recall: 0.89 (the pipeline finds the right information when it exists)
+ 
+WHAT THE EVALUATION HARNESS DOES
+An automated script generates 40 question-and-answer pairs from the knowledge base, runs each question through the full RAG pipeline, scores all four RAGAS metrics, and saves the results tagged with a version label. This means you can run an experiment, change something, run again, and compare the two tagged runs directly. It is the same evaluation workflow used at production AI companies, just scaled to a student project.
+ 
+PRODUCTION FEATURES
+The project runs in Docker with a single docker-compose up command. It has a health endpoint. ChromaDB (the vector database) is mounted as a persistent volume so data survives container restarts. GitHub Actions runs the test suite on every commit so regressions are caught automatically. LangSmith provides tracing on every retrieval and generation step.
+ 
+TECH STACK
+LangChain, ChromaDB, OpenAI embeddings and GPT for generation, RAGAS for evaluation, FastAPI, Docker, GitHub Actions for CI, LangSmith for observability, Python with uv.
+ 
+WHAT MAKES IT IMPRESSIVE TO A TECHNICAL INTERVIEWER
+Saying you built a RAG chatbot is not very interesting anymore. Being able to say you ran RAGAS evaluation with specific scores, identified where the pipeline was weak, changed the chunking strategy, and measured the improvement is a different level entirely. It shows Arhaam treats AI engineering as an empirical discipline, not guesswork.
+ 
+ 
+================================================================================
+PROJECT 4: DiscoverAI
+================================================================================
+ 
+WHAT IT IS
+An internal AI tool built for the Applied Engineering student organization at San Jose State University. Business development team members used to spend two to three hours manually researching a company before writing a project pitch. DiscoverAI cuts that to under five minutes. You type in a company name, the tool researches the company in parallel across multiple sources, and generates a set of grounded project ideas based on real, recent signals from that company.
+ 
+THE CORE PROBLEM IT SOLVES
+Generic project pitches get ignored. A pitch that says "we could build an AI dashboard for you" loses to a pitch that says "we saw you hired three ML engineers last month and just closed a Series B, so we think you are ready to automate your model monitoring pipeline." DiscoverAI forces every pitch to be grounded in a named, dated, real signal from the company. That constraint is the main reason pitch quality improved.
+ 
+HOW IT WORKS
+When you submit a company name, the backend fans out six Tavily web searches simultaneously using asyncio, while also scraping the company's homepage and about page, and resolving their logo. All of this runs concurrently, not sequentially, which is why the research phase is fast. The results feed into a structured LLM prompt that is required to cite real signals before generating any project idea. The ideas stream back to the frontend over SSE (Server-Sent Events) as they are generated, so you see the first idea appear in about three seconds rather than waiting for the full batch.
+ 
+The frontend is a React Flow canvas that lays out idea cards in real time using a custom tree layout algorithm. As each idea streams in, a new card appears and connects to its parent node.
+ 
+PROMPT CONFIGURATION
+Non-engineers on the business development team can change how the AI generates ideas by editing a markdown file called guidelines.md. The file is watched and reloaded without restarting the server. This was a deliberate product decision so that people without coding experience could tune the output quality and teach the system what good pitches look like.
+ 
+REAL IMPACT
+DiscoverAI is now the default first step in every Applied Engineering company engagement at SJSU. It replaced ad-hoc group brainstorm sessions before outreach. The research brief it generates gets attached to initial outreach emails, which made the BD team's opener significantly more specific and credible.
+ 
+TECH STACK
+Next.js 16, React 19, FastAPI, LangChain, GPT-4o, Claude Sonnet, Tavily, Supabase, React Flow, Server-Sent Events for streaming, Python asyncio for parallel research.
+ 
+WHAT MAKES IT IMPRESSIVE TO A TECHNICAL INTERVIEWER
+It is a real internal tool with real users making real business decisions with it. It uses streaming SSE for a fast first-render UX, parallel async research for speed, and a signal-first prompting architecture that reduces hallucination through constraint rather than just better prompting. It also shows product thinking, not just engineering: the hot-reload prompt config exists because Arhaam understood that the people who know what a good pitch looks like are not the people who write Python.
+ 
+ 
+================================================================================
+CROSS-PROJECT THEMES (useful for answering questions about Arhaam's overall approach)
+================================================================================
+ 
+EVALUATION AND MEASUREMENT
+Three of the four projects have real evaluation infrastructure. AgentGate has a 370-scenario adversarial test suite with published precision and recall numbers. The RAG chatbot has a versioned RAGAS eval harness with baseline scores. HireSignal has LangSmith tracing on every pipeline node. Arhaam builds evals into projects, not as an afterthought, but as the mechanism for knowing whether the system actually works.
+ 
+PRODUCTION THINKING
+All four projects have production artifacts: a published PyPI package, a Dockerized service with CI, a live internal tool with active users, or a deployed API with observability. None of them are just Jupyter notebooks or demo scripts.
+ 
+AGENTIC AI SYSTEMS
+Three of the four projects involve AI agents or multi-step AI pipelines rather than single LLM calls. Arhaam understands how to structure workflows as graphs (LangGraph), how to fan out parallel work, how to handle state across steps, and how to observe and debug pipelines in production.
+ 
+TECH STACK ACROSS ALL PROJECTS
+Python, LangGraph, LangChain, FastAPI, OpenAI API, Anthropic API, ChromaDB, Supabase, Docker, GitHub Actions, LangSmith, Tavily, Next.js, React, Streamlit, PyPI packaging, uv for dependency management.
+ 

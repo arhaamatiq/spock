@@ -157,3 +157,70 @@ class TestIngestion:
         assert num_chunks_1 > 0
         assert num_chunks_2 == 0  # Nothing new to ingest
 
+    def test_ingest_removes_deleted_documents(self, temp_docs_dir, temp_persist_dir, monkeypatch):
+        """Test that deleted source files are removed from the persistent store."""
+        from spock_rag.config import reset_settings
+        from spock_rag.ingest import ingest_documents
+        from spock_rag.retrieval import get_vector_store
+
+        monkeypatch.setenv("PERSIST_DIR", str(temp_persist_dir))
+        reset_settings()
+
+        ingest_documents(temp_docs_dir, force=True)
+
+        deleted_file = temp_docs_dir / "readme.md"
+        deleted_file.unlink()
+
+        ingest_documents(temp_docs_dir, force=False)
+
+        store = get_vector_store(temp_persist_dir)
+        records = store.get(include=["metadatas"])
+        sources = {metadata["source"] for metadata in records["metadatas"]}
+
+        assert str(deleted_file) not in sources
+        assert str(temp_docs_dir / "test.txt") in sources
+
+    def test_ingest_replaces_old_chunks_for_changed_document(
+        self,
+        temp_docs_dir,
+        temp_persist_dir,
+        monkeypatch,
+    ):
+        """Test that stale chunks are removed when a file shrinks after re-ingest."""
+        from spock_rag.config import reset_settings
+        from spock_rag.ingest import ingest_documents
+        from spock_rag.retrieval import get_vector_store
+
+        monkeypatch.setenv("PERSIST_DIR", str(temp_persist_dir))
+        reset_settings()
+
+        target_file = temp_docs_dir / "test.txt"
+        target_file.write_text("A " * 300)
+
+        first_count = ingest_documents(
+            temp_docs_dir,
+            force=True,
+            chunk_size=80,
+            chunk_overlap=0,
+        )
+        assert first_count > 1
+
+        target_file.write_text("Short replacement document.")
+
+        ingest_documents(
+            temp_docs_dir,
+            force=False,
+            chunk_size=80,
+            chunk_overlap=0,
+        )
+
+        store = get_vector_store(temp_persist_dir)
+        records = store.get(include=["metadatas"])
+        target_chunks = [
+            metadata
+            for metadata in records["metadatas"]
+            if metadata["source"] == str(target_file)
+        ]
+
+        assert len(target_chunks) == 1
+

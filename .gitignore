@@ -25,6 +25,7 @@ venv/
 ENV/
 env/
 .venv/
+.python-packages/
 
 # IDE
 .idea/
@@ -37,9 +38,6 @@ env/
 .env
 .env.local
 .env.*.local
-
-# ChromaDB persistence directory
-chroma_store/
 
 # Ingestion metadata
 ingestion_metadata.json

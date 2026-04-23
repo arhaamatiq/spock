@@ -47,6 +47,9 @@ python -m spock_api
 uvicorn spock_api.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
+On Railway, use `python -m spock_api` (or the repo `Procfile`). The app will bind to
+Railway's injected `PORT` automatically.
+
 ## API Endpoints
 
 ### Health Check
@@ -231,6 +234,8 @@ All errors return a consistent schema:
 - **CORS**: Configure `CORS_ORIGINS` to only allow your frontend domain
 - **Debug**: Set `DEBUG=false` in production to hide `/docs` endpoint
 - **Secrets**: API keys are never logged
+- **Vector store**: If you are deploying with a committed `chroma_store/`, rebuild it
+  locally after updating `data/docs/` and commit the regenerated files before deploy
 
 ## Logging
 

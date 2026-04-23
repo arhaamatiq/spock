@@ -14,6 +14,7 @@ Usage:
     python -m spock_api
 """
 
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator
@@ -239,11 +240,13 @@ async def root() -> dict:
 def run_server() -> None:
     """Run the API server using uvicorn."""
     import uvicorn
-    
+
+    port = int(os.getenv("PORT", str(settings.API_PORT)))
+
     uvicorn.run(
         "spock_api.main:app",
         host=settings.API_HOST,
-        port=settings.API_PORT,
+        port=port,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )

@@ -20,13 +20,13 @@ Usage:
 """
 
 import json
+import shutil
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Iterable, Set
 
 from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
-    UnstructuredMarkdownLoader,
 )
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -69,10 +69,8 @@ def load_single_document(file_path: Path) -> List[Document]:
     try:
         if ext == "pdf":
             loader = PyPDFLoader(str(file_path))
-        elif ext == "txt":
+        elif ext in ("txt", "md", "markdown"):
             loader = TextLoader(str(file_path), encoding="utf-8")
-        elif ext in ("md", "markdown"):
-            loader = UnstructuredMarkdownLoader(str(file_path))
         else:
             logger.warning(f"Unsupported file type: {file_path}")
             return []
@@ -163,8 +161,8 @@ def split_documents(
     """
     settings = get_settings()
     
-    chunk_size = chunk_size or settings.CHUNK_SIZE
-    chunk_overlap = chunk_overlap or settings.CHUNK_OVERLAP
+    chunk_size = settings.CHUNK_SIZE if chunk_size is None else chunk_size
+    chunk_overlap = settings.CHUNK_OVERLAP if chunk_overlap is None else chunk_overlap
     
     logger.debug(f"Splitting documents with chunk_size={chunk_size}, overlap={chunk_overlap}")
     
@@ -238,6 +236,21 @@ def save_ingestion_metadata(persist_dir: Path, metadata: Dict[str, Any]) -> None
             json.dump(metadata, f, indent=2)
     except Exception as e:
         logger.error(f"Failed to save ingestion metadata: {e}")
+
+
+def clear_persist_dir(persist_dir: Path) -> None:
+    """Delete the persisted Chroma directory so a force ingest starts clean."""
+    if persist_dir.exists():
+        shutil.rmtree(persist_dir)
+        logger.info(f"Cleared existing vector store at {persist_dir}")
+
+
+def delete_sources_from_vector_store(vector_store: Chroma, sources: Iterable[str]) -> None:
+    """Remove all chunks belonging to the given source paths."""
+    unique_sources: Set[str] = {source for source in sources if source}
+    for source in sorted(unique_sources):
+        vector_store._collection.delete(where={"source": source})
+        logger.info(f"Removed existing chunks for source: {source}")
 
 
 def get_vector_store(
@@ -314,50 +327,66 @@ def ingest_documents(
     
     logger.info(f"Starting document ingestion from {docs_dir}")
     
+    persist_dir = settings.PERSIST_DIR
+
     # Load existing metadata to check for changes
-    metadata = load_ingestion_metadata(settings.PERSIST_DIR)
+    metadata = load_ingestion_metadata(persist_dir)
     existing_hashes = metadata.get("file_hashes", {})
     
     # Load all documents
     all_documents = load_documents(docs_dir)
     
-    if not all_documents:
-        logger.warning("No documents found to ingest")
-        return 0
-    
-    # Filter out unchanged documents (unless force=True)
-    if not force:
-        documents_to_process = []
-        new_hashes = {}
-        
-        for doc in all_documents:
-            source = doc.metadata.get("source", "")
-            file_hash = doc.metadata.get("file_hash", "")
-            
-            # Check if this file has changed
-            if source not in existing_hashes or existing_hashes[source] != file_hash:
-                documents_to_process.append(doc)
-            
-            new_hashes[source] = file_hash
-        
-        if not documents_to_process:
+    current_hashes = {
+        doc.metadata.get("source", ""): doc.metadata.get("file_hash", "")
+        for doc in all_documents
+    }
+    deleted_sources = set(existing_hashes) - set(current_hashes)
+
+    if force:
+        clear_persist_dir(persist_dir)
+        documents_to_process = all_documents
+        sources_to_replace = set(current_hashes)
+        metadata = {"file_hashes": {}}
+    else:
+        sources_to_replace = {
+            source
+            for source, file_hash in current_hashes.items()
+            if existing_hashes.get(source) != file_hash
+        }
+        documents_to_process = [
+            doc
+            for doc in all_documents
+            if doc.metadata.get("source", "") in sources_to_replace
+        ]
+
+        if not documents_to_process and not deleted_sources:
             logger.info("All documents are unchanged, skipping ingestion")
             return 0
-        
-        logger.info(
-            f"Found {len(documents_to_process)} new/changed documents "
-            f"(skipping {len(all_documents) - len(documents_to_process)} unchanged)"
-        )
-        all_documents = documents_to_process
-    else:
-        # Collect all file hashes for metadata
-        new_hashes = {
-            doc.metadata.get("source", ""): doc.metadata.get("file_hash", "")
-            for doc in all_documents
-        }
+
+        if documents_to_process:
+            logger.info(
+                f"Found {len(sources_to_replace)} new/changed file(s) "
+                f"(skipping {len(current_hashes) - len(sources_to_replace)} unchanged)"
+            )
+        if deleted_sources:
+            logger.info(f"Found {len(deleted_sources)} deleted file(s) to remove from the store")
+    
+    if deleted_sources and not force and not documents_to_process:
+        vector_store = get_vector_store()
+        delete_sources_from_vector_store(vector_store, deleted_sources)
+        metadata["file_hashes"] = current_hashes
+        save_ingestion_metadata(persist_dir, metadata)
+        logger.info("Removed deleted documents from vector store")
+        return 0
+
+    if not documents_to_process:
+        logger.warning("No documents found to ingest")
+        metadata["file_hashes"] = current_hashes
+        save_ingestion_metadata(persist_dir, metadata)
+        return 0
     
     # Split documents into chunks
-    chunks = split_documents(all_documents, chunk_size, chunk_overlap)
+    chunks = split_documents(documents_to_process, chunk_size, chunk_overlap)
     
     if not chunks:
         logger.warning("No chunks produced after splitting")
@@ -365,6 +394,12 @@ def ingest_documents(
     
     # Get the vector store
     vector_store = get_vector_store()
+
+    if not force and (sources_to_replace or deleted_sources):
+        delete_sources_from_vector_store(
+            vector_store,
+            set(sources_to_replace) | set(deleted_sources),
+        )
     
     # Add documents to the vector store
     # ChromaDB handles persistence automatically
@@ -384,8 +419,8 @@ def ingest_documents(
         raise
     
     # Update metadata with new file hashes
-    metadata["file_hashes"] = new_hashes
-    save_ingestion_metadata(settings.PERSIST_DIR, metadata)
+    metadata["file_hashes"] = current_hashes
+    save_ingestion_metadata(persist_dir, metadata)
     
     return len(chunks)
 

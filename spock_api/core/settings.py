@@ -5,11 +5,12 @@ Configuration via environment variables using pydantic-settings.
 All settings have sensible defaults for development.
 """
 
+import json
 from functools import lru_cache
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
     # CORS Configuration
     # ==========================================================================
     
-    CORS_ORIGINS: List[str] = Field(
+    CORS_ORIGINS: Annotated[List[str], NoDecode] = Field(
         default=["http://localhost:3000", "http://127.0.0.1:3000"],
         description="Allowed CORS origins (comma-separated in env)",
     )
@@ -76,12 +77,12 @@ class Settings(BaseSettings):
         description="Allow credentials in CORS requests",
     )
     
-    CORS_ALLOW_METHODS: List[str] = Field(
+    CORS_ALLOW_METHODS: Annotated[List[str], NoDecode] = Field(
         default=["GET", "POST", "OPTIONS"],
         description="Allowed HTTP methods for CORS",
     )
     
-    CORS_ALLOW_HEADERS: List[str] = Field(
+    CORS_ALLOW_HEADERS: Annotated[List[str], NoDecode] = Field(
         default=["*"],
         description="Allowed headers for CORS",
     )
@@ -147,12 +148,25 @@ class Settings(BaseSettings):
         description="Artificial delay between stream chunks in ms (for testing)",
     )
     
-    @field_validator("CORS_ORIGINS", mode="before")
+    @field_validator(
+        "CORS_ORIGINS",
+        "CORS_ALLOW_METHODS",
+        "CORS_ALLOW_HEADERS",
+        mode="before",
+    )
     @classmethod
-    def parse_cors_origins(cls, v: str | List[str]) -> List[str]:
-        """Parse comma-separated CORS origins from environment variable."""
+    def parse_list_env(cls, v: str | List[str]) -> List[str]:
+        """Parse list-like env vars from either CSV or JSON array strings."""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            value = v.strip()
+            if not value:
+                return []
+            if value.startswith("["):
+                parsed = json.loads(value)
+                if not isinstance(parsed, list):
+                    raise ValueError("Expected a JSON array")
+                return [str(item).strip() for item in parsed if str(item).strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
         return v
     
     @field_validator("LOG_LEVEL", mode="after")

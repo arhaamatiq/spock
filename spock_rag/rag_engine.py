@@ -39,6 +39,7 @@ from spock_rag.retrieval import (
     retrieve_documents,
     format_context,
     check_store_exists,
+    has_profile_fallback,
 )
 from spock_rag.session import SessionManager
 from spock_rag.utils import validate_question
@@ -235,7 +236,7 @@ class RAGEngine:
             return EMPTY_QUESTION_MESSAGE
         
         # Check if vector store exists
-        if not check_store_exists():
+        if not check_store_exists() and not has_profile_fallback(question):
             logger.warning("Vector store is empty or doesn't exist")
             return NO_CONTEXT_MESSAGE
         
@@ -310,7 +311,7 @@ class RAGEngine:
             return
         
         # Check if vector store exists
-        if not check_store_exists():
+        if not check_store_exists() and not has_profile_fallback(question):
             logger.warning("Vector store is empty or doesn't exist")
             yield NO_CONTEXT_MESSAGE
             return

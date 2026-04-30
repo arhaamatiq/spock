@@ -18,8 +18,11 @@ Usage:
     docs = retrieve_with_scores("What is Python?", k=4, min_score=0.5)
 """
 
+import os
+import re
+from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
@@ -32,6 +35,53 @@ from spock_rag.utils import ensure_directory
 
 
 logger = get_logger(__name__)
+
+
+# These local source files are small, high-signal profile documents. They give
+# the chatbot a grounded baseline for broad recruiter questions where embeddings
+# may not retrieve the right chunk from vague wording like "where are you from?"
+PROFILE_SOURCE_FILES = (
+    "identity_snapshot.txt",
+    "origin_story.txt",
+    "personal_positioning.txt",
+    "projects.txt",
+)
+
+PROFILE_QUERY_EXPANSIONS = (
+    "Arhaam Atiq personal background origin Bangalore India international student San Jose State University",
+    "Arhaam Atiq education Applied Math CS SJSU Physics UL Solutions AI",
+    "Arhaam Atiq projects skills AgentGate HireSignal DiscoverAI Applied Engineering leadership",
+    "Arhaam Atiq recruiter interview strengths production AI engineering evaluation metrics",
+)
+
+PROFILE_TERMS = (
+    "arhaam",
+    "atiq",
+    "you",
+    "your",
+    "yourself",
+    "candidate",
+    "student",
+    "background",
+    "origin",
+    "from",
+    "built",
+    "project",
+    "skill",
+    "strength",
+    "hire",
+    "recruiter",
+    "experience",
+    "education",
+    "university",
+    "sjsu",
+    "agentgate",
+    "hiresignal",
+    "discoverai",
+    "ae",
+    "chatbot",
+    "ul",
+)
 
 
 # =============================================================================
@@ -128,6 +178,94 @@ def get_retriever(
 
 
 # =============================================================================
+# Profile-Aware Retrieval Helpers
+# =============================================================================
+
+
+def is_candidate_profile_question(query: str) -> bool:
+    """
+    Return True when a query is likely about Arhaam or this portfolio chatbot.
+
+    Recruiters often ask short, human questions such as "where are you from?"
+    Those are semantically about Arhaam even though they do not name him.
+    """
+    tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
+    return any(term in tokens for term in PROFILE_TERMS)
+
+
+def build_retrieval_queries(query: str) -> List[str]:
+    """
+    Build one or more search queries for retrieval.
+
+    The original wording is always preserved. For candidate/profile questions we
+    add high-signal Arhaam-specific expansions to avoid missing obvious facts
+    behind vague pronouns or conversational phrasing.
+    """
+    queries = [query.strip()]
+
+    if is_candidate_profile_question(query):
+        queries.extend(PROFILE_QUERY_EXPANSIONS)
+
+    deduped: List[str] = []
+    seen = set()
+    for item in queries:
+        normalized = " ".join(item.split()).lower()
+        if item and normalized not in seen:
+            deduped.append(item)
+            seen.add(normalized)
+
+    return deduped
+
+
+@lru_cache(maxsize=8)
+def _load_profile_documents_from_dir(docs_dir: str) -> Tuple[Document, ...]:
+    """Load curated profile documents directly from disk."""
+    directory = Path(docs_dir)
+    documents: List[Document] = []
+
+    for filename in PROFILE_SOURCE_FILES:
+        path = directory / filename
+        if not path.exists() or not path.is_file():
+            continue
+
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            logger.warning(f"Failed to load profile fallback document {path}: {e}")
+            continue
+
+        if content:
+            documents.append(
+                Document(
+                    page_content=content,
+                    metadata={
+                        "source": str(path),
+                        "chunk_index": 0,
+                        "doc_id": f"profile::{filename}",
+                    },
+                )
+            )
+
+    return tuple(documents)
+
+
+def load_profile_context_documents(docs_dir: Optional[Path] = None) -> List[Document]:
+    """
+    Load curated profile documents for grounded fallback context.
+
+    This intentionally does not require the vector store or embeddings to be
+    available, so personal questions can still be answered from committed docs.
+    """
+    directory = docs_dir or Path(os.getenv("DOCS_DIR", "./data/docs"))
+    return list(_load_profile_documents_from_dir(str(directory)))
+
+
+def has_profile_fallback(query: str) -> bool:
+    """Return whether a profile-like query can be answered from local docs."""
+    return is_candidate_profile_question(query) and bool(load_profile_context_documents())
+
+
+# =============================================================================
 # Advanced Retrieval with Scores
 # =============================================================================
 
@@ -217,8 +355,50 @@ def retrieve_documents(
     Returns:
         List of Document objects.
     """
-    results = retrieve_with_scores(query, k, min_score)
+    results = retrieve_profile_aware_documents(query, k, min_score)
     return [doc for doc, _ in results]
+
+
+def retrieve_profile_aware_documents(
+    query: str,
+    k: Optional[int] = None,
+    min_score: Optional[float] = None,
+) -> List[Tuple[Document, float]]:
+    """
+    Retrieve documents with candidate-aware query expansion and profile fallback.
+
+    For broad personal/recruiter questions, this combines vector retrieval with
+    curated profile files from `data/docs` so the LLM has enough grounded context
+    to infer useful answers instead of refusing.
+    """
+    if k is None:
+        k = get_settings().RETRIEVAL_K
+    results_by_key: Dict[str, Tuple[Document, float]] = {}
+
+    for search_query in build_retrieval_queries(query):
+        try:
+            for doc, score in retrieve_with_scores(search_query, k, min_score):
+                key = (
+                    doc.metadata.get("doc_id")
+                    or f"{doc.metadata.get('source', '')}:{doc.metadata.get('chunk_index', '')}"
+                    or doc.page_content[:200]
+                )
+                existing = results_by_key.get(key)
+                if existing is None or score > existing[1]:
+                    results_by_key[key] = (doc, score)
+        except Exception as e:
+            logger.warning(
+                f"Profile-aware retrieval skipped query '{search_query[:50]}...': {e}"
+            )
+
+    if is_candidate_profile_question(query):
+        for doc in load_profile_context_documents():
+            key = doc.metadata.get("doc_id", doc.page_content[:200])
+            results_by_key.setdefault(key, (doc, 1.0))
+
+    results = list(results_by_key.values())
+    results.sort(key=lambda item: item[1], reverse=True)
+    return results[: max(k, len(PROFILE_SOURCE_FILES))]
 
 
 def format_context(documents: List[Document], include_source: bool = True) -> str:

@@ -54,6 +54,11 @@ class Settings:
     PERSIST_DIR: Path = field(
         default_factory=lambda: Path(os.getenv("PERSIST_DIR", "./chroma_store"))
     )
+
+    # Directory containing source profile/knowledge documents.
+    DOCS_DIR: Path = field(
+        default_factory=lambda: Path(os.getenv("DOCS_DIR", "./data/docs"))
+    )
     
     # ==========================================================================
     # Text Splitting Configuration

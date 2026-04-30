@@ -27,7 +27,8 @@ from spock_rag.prompts import (
 from spock_rag.retrieval import (
     check_store_exists,
     format_context,
-    retrieve_with_scores,
+    has_profile_fallback,
+    retrieve_profile_aware_documents,
 )
 from spock_rag.utils import validate_question
 
@@ -164,7 +165,7 @@ class RAGService:
         """
         try:
             # Get documents with scores for logging
-            results = retrieve_with_scores(question, k=self.retrieval_k)
+            results = retrieve_profile_aware_documents(question, k=self.retrieval_k)
             
             if not results:
                 logger.warning(f"No documents retrieved for: '{question[:50]}...'")
@@ -211,7 +212,7 @@ class RAGService:
             return "It looks like you didn't ask a question. Please type your question."
         
         # Check if vector store exists
-        if not check_store_exists():
+        if not check_store_exists() and not has_profile_fallback(question):
             logger.warning("Vector store is empty or doesn't exist")
             return NO_CONTEXT_MESSAGE
         
@@ -297,7 +298,7 @@ class RAGService:
             return
         
         # Check if vector store exists
-        if not check_store_exists():
+        if not check_store_exists() and not has_profile_fallback(question):
             logger.warning("Vector store is empty or doesn't exist")
             yield NO_CONTEXT_MESSAGE
             return

@@ -40,12 +40,7 @@ logger = get_logger(__name__)
 # These local source files are small, high-signal profile documents. They give
 # the chatbot a grounded baseline for broad recruiter questions where embeddings
 # may not retrieve the right chunk from vague wording like "where are you from?"
-PROFILE_SOURCE_FILES = (
-    "identity_snapshot.txt",
-    "origin_story.txt",
-    "personal_positioning.txt",
-    "projects.txt",
-)
+PROFILE_SOURCE_FILES = ("01_identity_and_direction.md",)
 
 PROFILE_QUERY_EXPANSIONS = (
     "Arhaam Atiq personal background origin Bangalore India international student San Jose State University",

@@ -24,18 +24,18 @@ def test_profile_context_documents_load_from_configured_docs_dir(tmp_path):
 
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "identity_snapshot.txt").write_text(
-        "My name is Arhaam Atiq. I go to San Jose State University.",
+    (docs_dir / "01_identity_and_direction.md").write_text(
+        "My name is Arhaam Atiq. I am an international student from Bangalore, India.",
         encoding="utf-8",
     )
-    (docs_dir / "origin_story.txt").write_text(
-        "I am an international student from Bangalore, India.",
+    (docs_dir / "02_flagship_systems_breakwater_agentgate.md").write_text(
+        "Not a profile fallback file.",
         encoding="utf-8",
     )
 
     docs = load_profile_context_documents(docs_dir)
 
-    assert len(docs) == 2
+    assert len(docs) == 1
     assert any("Bangalore, India" in doc.page_content for doc in docs)
 
 
@@ -48,7 +48,7 @@ def test_profile_aware_retrieval_uses_fallback_when_vector_search_fails(
 
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir()
-    (docs_dir / "origin_story.txt").write_text(
+    (docs_dir / "01_identity_and_direction.md").write_text(
         "I am an international student from Bangalore, India.",
         encoding="utf-8",
     )
